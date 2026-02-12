@@ -39,6 +39,15 @@ proc setCredential*(provider: string, cred: AuthCredential) =
   store.credentials[provider] = cred
   saveAuthStore(store)
 
+proc isExpired*(cred: AuthCredential): bool =
+  if cred.expiresAt == 0: return false
+  return epochTime() > cred.expiresAt
+
+proc needsRefresh*(cred: AuthCredential): bool =
+  if cred.expiresAt == 0: return false
+  # Refresh if less than 5 minutes left
+  return epochTime() > (cred.expiresAt - 300)
+
 proc getCredential*(provider: string): Option[AuthCredential] =
   let store = loadAuthStore()
   if store.credentials.hasKey(provider):

@@ -31,6 +31,34 @@ proc convertKeysToSnake(node: JsonNode): JsonNode =
   else:
     result = node
 
+proc copyFile(src, dst: string) =
+  createDir(parentDir(dst))
+  let s = open(src)
+  let d = open(dst, fmWrite)
+  d.write(s.readAll())
+  s.close()
+  d.close()
+
+proc migrateWorkspace(src, dst: string) =
+  let files = ["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md"]
+  for f in files:
+    let sPath = src / f
+    let dPath = dst / f
+    if fileExists(sPath):
+      logger.info("migrate", "Copying file", {"file": f})
+      copyFile(sPath, dPath)
+
+  let dirs = ["memory", "skills"]
+  for d in dirs:
+    let sPath = src / d
+    let dPath = dst / d
+    if dirExists(sPath):
+      logger.info("migrate", "Migrating directory", {"dir": d})
+      # Simplified recursive copy
+      for kind, entry in walkDir(sPath, relative=true):
+        if kind == pcFile:
+          copyFile(sPath / entry, dPath / entry)
+
 proc convertConfig*(data: JsonNode): (Config, seq[string]) =
   var cfg = defaultConfig()
   var warnings: seq[string] = @[]
@@ -86,5 +114,9 @@ proc runMigration*(openclawHome, picoclawHome: string, dryRun: bool = false) =
       let dest = picoclawHome / "config.json"
       if saveConfig(dest, cfg):
         logger.info("migrate", "Config migrated successfully", {"to": dest})
+
+      let srcWS = openclawHome / "workspace"
+      let dstWS = picoclawHome / "workspace"
+      migrateWorkspace(srcWS, dstWS)
   except Exception as e:
     logger.error("migrate", "Migration failed", {"error": e.msg})

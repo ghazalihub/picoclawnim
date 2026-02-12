@@ -1,5 +1,6 @@
 import std/os
 import std/strutils
+import std/times
 import std/httpclient
 import std/asyncdispatch
 import logger
@@ -32,11 +33,12 @@ type
     loggerPrefix*: string
 
 proc downloadFile*(url: string, filename: string, options: DownloadOptions = DownloadOptions(loggerPrefix: "utils")): string =
-  let tempDir = getTempDir() / "picoclaw"
-  if not dirExists(tempDir):
-    createDir(tempDir)
+  let mediaDir = getTempDir() / "picoclaw_media"
+  if not dirExists(mediaDir):
+    createDir(mediaDir)
 
-  let destPath = tempDir / filename
+  # Add some randomness to filename to avoid collisions
+  let destPath = mediaDir / ( $ (epochTime().int mod 1000000) & "_" & filename)
   let client = newHttpClient()
   defer: client.close()
 

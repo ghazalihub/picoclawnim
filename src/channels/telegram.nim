@@ -14,6 +14,12 @@ type
     token*: string
     lastUpdateID*: int
 
+proc markdownToTelegramHTML(text: string): string =
+  if text == "": return ""
+  # Very simplified version without regex to avoid PCRE dependency
+  result = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+  # Note: This doesn't handle nested styles correctly, but is good enough for a lightweight version
+
 proc newTelegramChannel*(token: string, bus: MessageBus, allowFrom: seq[string] = @[]): TelegramChannel =
   let c = TelegramChannel(
     name: "telegram",
@@ -30,7 +36,7 @@ method send*(c: TelegramChannel, msg: OutboundMessage) {.async.} =
   let url = "https://api.telegram.org/bot" & c.token & "/sendMessage"
   let body = %*{
     "chat_id": msg.chatID,
-    "text": msg.content,
+    "text": markdownToTelegramHTML(msg.content),
     "parse_mode": "HTML"
   }
 
@@ -47,17 +53,40 @@ method send*(c: TelegramChannel, msg: OutboundMessage) {.async.} =
 proc processUpdate(c: TelegramChannel, update: JsonNode) {.async.} =
   if update.hasKey("message"):
     let message = update["message"]
-    if message.hasKey("text") and message.hasKey("from") and message.hasKey("chat"):
-      let text = message["text"].getStr()
+    if message.hasKey("from") and message.hasKey("chat"):
+      var content = ""
+      if message.hasKey("text"): content = message["text"].getStr()
+      elif message.hasKey("caption"): content = message["caption"].getStr()
+
       let user = message["from"]
       let chat = message["chat"]
 
       let senderID = $user["id"].getInt()
       let chatID = $chat["id"].getInt()
 
-      logger.info("telegram", "Received message", {"from": senderID, "text": text.truncate(20)})
+      var mediaPaths: seq[string] = @[]
 
-      await c.handleMessage(senderID, chatID, text)
+      if message.hasKey("photo"):
+        let photos = message["photo"]
+        let photo = photos[photos.len - 1]
+        content &= "\n[image: photo]"
+
+      if message.hasKey("voice"):
+        content &= "\n[voice]"
+
+      if content == "": content = "[empty message]"
+
+      logger.info("telegram", "Received message", {"from": senderID, "text": content.truncate(20)})
+
+      # Thinking indicator
+      let actionBody = %*{"chat_id": chatID, "action": "typing"}
+      let client = newAsyncHttpClient()
+      try:
+        discard await client.post("https://api.telegram.org/bot" & c.token & "/sendChatAction", $actionBody)
+      finally:
+        client.close()
+
+      await c.handleMessage(senderID, chatID, content, mediaPaths)
 
 method start*(c: TelegramChannel) {.async.} =
   logger.info("telegram", "Starting Telegram channel")

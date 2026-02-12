@@ -10,10 +10,10 @@ import memory
 
 type
   ContextBuilder* = ref object
-    workspace: string
-    skillsLoader: SkillsLoader
-    memory: MemoryStore
-    tools: ToolRegistry
+    workspace*: string
+    skillsLoader*: SkillsLoader
+    memory*: MemoryStore
+    tools*: ToolRegistry
 
 proc newContextBuilder*(workspace: string): ContextBuilder =
   let builtinSkillsDir = getAppDir() / "skills"
@@ -30,7 +30,7 @@ proc setToolsRegistry*(cb: ContextBuilder, registry: ToolRegistry) =
 
 proc getIdentity(cb: ContextBuilder): string =
   let nowStr = now().format("yyyy-MM-dd HH:mm (dddd)")
-  let workspacePath = expandFilename(cb.workspace)
+  let workspacePath = try: expandFilename(cb.workspace) except: cb.workspace
   let runtime = hostOS & " " & hostCPU
 
   var toolsSection = ""
@@ -40,7 +40,7 @@ proc getIdentity(cb: ContextBuilder): string =
       toolsSection = "## Available Tools\n\n**CRITICAL**: You MUST use tools to perform actions. Do NOT pretend to execute commands or schedule tasks.\n\nYou have access to the following tools:\n\n"
       for d in defs:
         let fn = d["function"]
-        toolsSection &= "- " & fn["name"].getStr() & ": " & fn["description"].getStr() & "\n"
+        toolsSection &= "### " & fn["name"].getStr() & "\n" & fn["description"].getStr() & "\n"
 
   result = fmt"""# picoclaw 🦞
 

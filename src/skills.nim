@@ -75,7 +75,7 @@ proc getSkillMetadata(path: string): JsonNode =
 
 proc listSkillsInDir(dir: string, source: string): seq[SkillInfo] =
   result = @[]
-  if not dirExists(dir): return
+  if dir == "" or not dirExists(dir): return
   for kind, path in walkDir(dir):
     if kind == pcDir:
       let skillFile = path / "SKILL.md"
@@ -89,6 +89,25 @@ proc listSkillsInDir(dir: string, source: string): seq[SkillInfo] =
         if meta.hasKey("description"):
           info.description = meta["description"].getStr()
         result.add(info)
+
+proc loadSkill*(sl: SkillsLoader, name: string): (string, bool) =
+  # Try all sources in priority order
+  for dir in [sl.workspaceSkills, sl.globalSkills, sl.builtinSkills]:
+    let path = dir / name / "SKILL.md"
+    if fileExists(path):
+      try:
+        return (stripFrontmatter(readFile(path)), true)
+      except: discard
+  return ("", false)
+
+proc loadSkillsForContext*(sl: SkillsLoader, skillNames: seq[string]): string =
+  if skillNames.len == 0: return ""
+  var parts: seq[string] = @[]
+  for name in skillNames:
+    let (content, ok) = sl.loadSkill(name)
+    if ok:
+      parts.add("### Skill: " & name & "\n\n" & content)
+  return parts.join("\n\n---\n\n")
 
 proc listSkills*(sl: SkillsLoader): seq[SkillInfo] =
   var skills: seq[SkillInfo] = @[]
@@ -119,6 +138,12 @@ proc listSkills*(sl: SkillsLoader): seq[SkillInfo] =
 
   return skills
 
+proc getSkillsInfo*(sl: SkillsLoader): JsonNode =
+  let skills = sl.listSkills()
+  var names = newJArray()
+  for s in skills: names.add(%s.name)
+  return %*{"total": skills.len, "available": skills.len, "names": names}
+
 proc escapeXml(s: string): string =
   s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -137,15 +162,6 @@ proc buildSkillsSummary*(sl: SkillsLoader): string =
   lines.add("</skills>")
   return lines.join("\n")
 
-proc loadSkill*(sl: SkillsLoader, name: string): (string, bool) =
-  # Try all sources in priority order
-  for dir in [sl.workspaceSkills, sl.globalSkills, sl.builtinSkills]:
-    let path = dir / name / "SKILL.md"
-    if fileExists(path):
-      try:
-        return (stripFrontmatter(readFile(path)), true)
-      except: discard
-  return ("", false)
 
 type
   SkillInstaller* = ref object

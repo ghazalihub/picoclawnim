@@ -64,7 +64,7 @@ proc newCronService*(storePath: string): CronService =
       logger.error("cron", "Failed to load cron store")
   return cs
 
-proc saveStore(cs: CronService) =
+proc saveStore*(cs: CronService) =
   try:
     createDir(cs.storePath.parentDir())
     writeFile(cs.storePath, cs.store.toJson().pretty())
